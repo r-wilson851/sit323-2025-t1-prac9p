@@ -1,0 +1,57 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mongo-backup
+spec:
+  schedule: "0 4 * * *"  # occurs daily at 4am 
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: mongo-backup
+            image: bitnami/mongodb:latest
+            command:
+              - /bin/sh
+              - -c
+              - |
+                mongodump --host=mongo.default.svc.cluster.local \
+                          --username=$(MONGO_USER) \
+                          --password=$(MONGO_PASS) \
+                          --authenticationDatabase=admin \
+                          --out=/backups/$(date +%F-%H%M)
+            env:
+              - name: MONGO_USER
+                valueFrom:
+                  secretKeyRef:
+                    name: mongo-secret
+                    key: MONGO_USERNAME
+              - name: MONGO_PASS
+                valueFrom:
+                  secretKeyRef:
+                    name: mongo-secret
+                    key: MONGO_PASSWORD 
+            volumeMounts:
+              - name: backup-storage
+                mountPath: /backups
+          restartPolicy: OnFailure
+          volumes:
+            - name: backup-storage
+              persistentVolumeClaim:
+                claimName: mongo-backup-pvc
+
+
+----
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongo-backup-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+
+
